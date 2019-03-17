@@ -232,10 +232,11 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
                 self._n_train_steps_total += 1
             self.training_mode(False)
 
-    def _try_to_eval(self, epoch, eval_paths=None):
+    def _try_to_eval(self, epoch, eval_paths=None, no_test=False):
         logger.save_extra_data(self.get_extra_data_to_save(epoch))
         if self._can_evaluate():
-            self.evaluate(epoch, eval_paths=eval_paths)
+            if not no_test:
+                self.evaluate(epoch, eval_paths=eval_paths)
 
             params = self.get_epoch_snapshot(epoch)
             logger.save_itr_params(epoch, params)

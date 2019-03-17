@@ -53,3 +53,6 @@ class SimpleReplayBuffer(ReplayBuffer):
 
     def num_steps_can_sample(self):
         return self._size
+
+    def __len__(self):
+        return self._size
