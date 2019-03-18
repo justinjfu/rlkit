@@ -5,6 +5,7 @@ from collections import OrderedDict
 
 import gtimer as gt
 import numpy as np
+import tqdm
 
 from rlkit.core import eval_util, logger
 from rlkit.data_management.env_replay_buffer import EnvReplayBuffer
@@ -37,6 +38,7 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
             eval_sampler=None,
             eval_policy=None,
             replay_buffer=None,
+            replay_buffer_file=None,
             collection_mode='online',
     ):
         """
@@ -69,7 +71,7 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
          - 'online': Train after every step taken in the environment.
          - 'batch': Train after every epoch.
         """
-        assert collection_mode in ['online', 'batch']
+        assert collection_mode in ['online', 'batch', 'offline']
         if collection_mode == 'batch':
             assert num_updates_per_epoch is not None
 
@@ -117,6 +119,8 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
                 self.replay_buffer_size,
                 self.env,
             )
+            if replay_buffer_file is not None:
+                replay_buffer.load_from(replay_buffer_file)
         self.replay_buffer = replay_buffer
 
         self._n_env_steps_total = 0
@@ -143,10 +147,42 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
             self.train_online(start_epoch=start_epoch)
         elif self.collection_mode == 'batch':
             self.train_batch(start_epoch=start_epoch)
+        elif self.collection_mode == 'offline':
+            self.train_offline(start_epoch=start_epoch)
         else:
             raise TypeError("Invalid collection_mode: {}".format(
                 self.collection_mode
             ))
+
+    def collect_data(self, filename, num_samples, start_epoch=0):
+        self.pretrain()
+        if start_epoch == 0:
+            params = self.get_epoch_snapshot(-1)
+            logger.save_itr_params(-1, params)
+        self.training_mode(False)
+        self._n_env_steps_total = start_epoch * self.num_env_steps_per_epoch
+        gt.reset()
+        gt.set_def_unique(False)
+        if self.collection_mode == 'online':
+            self.train_online(start_epoch=start_epoch)
+        elif self.collection_mode == 'batch':
+            self.train_batch(start_epoch=start_epoch)
+        elif self.collection_mode == 'offline':
+            self.train_offline(start_epoch=start_epoch)
+        else:
+            raise TypeError("Invalid collection_mode: {}".format(
+                self.collection_mode
+            ))
+
+        replay_buffer = EnvReplayBuffer(
+            num_samples,
+            self.env,
+        )
+        self.replay_buffer = replay_buffer
+        observation = self._start_new_rollout()
+        for _ in tqdm.tqdm(range(num_samples)):
+            observation = self._take_step_in_env(observation)
+        replay_buffer.save_to(filename)
 
     def pretrain(self):
         pass
@@ -160,7 +196,7 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
             self._start_epoch(epoch)
             set_to_train_mode(self.training_env)
             observation = self._start_new_rollout()
-            for _ in range(self.num_env_steps_per_epoch):
+            for _ in tqdm.tqdm(range(self.num_env_steps_per_epoch)):
                 observation = self._take_step_in_env(observation)
                 gt.stamp('sample')
 
@@ -190,6 +226,21 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
             self._try_to_train()
             gt.stamp('train')
 
+            set_to_eval_mode(self.env)
+            self._try_to_eval(epoch)
+            gt.stamp('eval')
+            self._end_epoch(epoch)
+
+    def train_offline(self, start_epoch):
+        for epoch in gt.timed_for(
+                range(start_epoch, self.num_epochs),
+                save_itrs=True,
+        ):
+            self._start_epoch(epoch)
+
+            for _ in range(self.num_env_steps_per_epoch):
+                self._try_to_train()
+            gt.stamp('train')
             set_to_eval_mode(self.env)
             self._try_to_eval(epoch)
             gt.stamp('eval')
