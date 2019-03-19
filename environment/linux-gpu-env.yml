@@ -1,4 +1,4 @@
-name: rlkit
+name: rlkitgpu
 channels:
 - kne  # for pybox2d
 - pytorch
