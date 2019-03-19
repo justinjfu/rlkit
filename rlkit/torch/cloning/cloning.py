@@ -19,7 +19,7 @@ class Cloning(TorchRLAlgorithm):
             self,
             env,
             policy,
-            policy_learning_rate=1e-3,
+            policy_lr=1e-3,
             optimizer_class=optim.Adam,
             **kwargs
     ):
@@ -33,7 +33,7 @@ class Cloning(TorchRLAlgorithm):
         self.policy = policy
         self.policy_optimizer = optimizer_class(
             self.policy.parameters(),
-            lr=policy_learning_rate,
+            lr=policy_lr,
         )
 
     def _do_training(self):
@@ -44,13 +44,23 @@ class Cloning(TorchRLAlgorithm):
         actions = batch['actions']
         #next_obs = batch['next_observations']
 
-        policy_actions = self.policy(obs)
-        policy_error = (policy_actions - actions) ** 2
-        policy_loss = policy_error.mean()
+        # Soft policy
+        policy_outputs = self.policy(obs)
+        if isinstance(policy_outputs, tuple):
+            policy_logprobs = self.policy.logprob(
+                    obs,
+                    actions
+            )
+            policy_loss = torch.mean(policy_logprobs)
+            policy_actions, policy_mean = policy_outputs[0:2]
+        else:
+            policy_actions = policy_outputs
+            policy_error = (policy_actions - actions) ** 2
+            policy_loss = policy_error.mean()
 
-        self.policy_optimizer.zero_grad()
-        policy_loss.backward()
-        self.policy_optimizer.step()
+            self.policy_optimizer.zero_grad()
+            policy_loss.backward()
+            self.policy_optimizer.step()
 
         """
         Save some statistics for eval using just one batch.

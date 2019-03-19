@@ -82,6 +82,8 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
         self.num_steps_per_eval = num_steps_per_eval
         if collection_mode == 'online':
             self.num_updates_per_train_call = num_updates_per_env_step
+        elif collection_mode == 'offline':
+            self.num_updates_per_train_call = 1
         else:
             self.num_updates_per_train_call = num_updates_per_epoch
         self.batch_size = batch_size
@@ -238,11 +240,13 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
         ):
             self._start_epoch(epoch)
 
-            for _ in range(self.num_env_steps_per_epoch):
+            for _ in tqdm.tqdm(range(self.num_env_steps_per_epoch)):
                 self._try_to_train()
             gt.stamp('train')
             set_to_eval_mode(self.env)
-            self._try_to_eval(epoch)
+            #self._try_to_eval(epoch, force_eval=True)
+            self.evaluate(epoch)
+            logger.dump_tabular(with_prefix=False, with_timestamp=False)
             gt.stamp('eval')
             self._end_epoch(epoch)
 
@@ -283,9 +287,9 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
                 self._n_train_steps_total += 1
             self.training_mode(False)
 
-    def _try_to_eval(self, epoch, eval_paths=None):
+    def _try_to_eval(self, epoch, eval_paths=None, force_eval=False):
         logger.save_extra_data(self.get_extra_data_to_save(epoch))
-        if self._can_evaluate():
+        if self._can_evaluate() or force_eval:
             self.evaluate(epoch, eval_paths=eval_paths)
 
             params = self.get_epoch_snapshot(epoch)

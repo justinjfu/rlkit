@@ -12,7 +12,8 @@ from rlkit.launchers.launcher_util import setup_logger
 from rlkit.torch.sac.policies import TanhGaussianPolicy
 from rlkit.torch.sac.sac import SoftActorCritic
 from rlkit.torch.networks import FlattenMlp
-from rlkit.torch.sac import robust_sac
+from rlkit.torch.networks import FlattenMlp, TanhMlpPolicy
+from rlkit.torch.cloning.cloning import Cloning
 
 
 def experiment(variant):
@@ -40,11 +41,14 @@ def experiment(variant):
         obs_dim=obs_dim,
         action_dim=action_dim,
     )
-    algorithm = SoftActorCritic(
+    #policy = TanhMlpPolicy(
+    #    input_size=obs_dim,
+    #    output_size=action_dim,
+    #    hidden_sizes=[400, 300],
+    #)
+    algorithm = Cloning(
         env=env,
         policy=policy,
-        qf=qf,
-        vf=vf,
         **variant['algo_params']
     )
     algorithm.to(ptu.device)
@@ -63,17 +67,11 @@ if __name__ == "__main__":
             discount=0.99,
             reward_scale=1,
 
-            soft_target_tau=0.001,
             policy_lr=3E-4,
-            qf_lr=3E-4,
-            vf_lr=3E-4,
-            use_automatic_entropy_tuning=False,
-            #replay_buffer_file='buffers/sac_halfcheetah/random1e7/buffer.npz',
             replay_buffer_file='buffers/sac_halfcheetah/itr250_1e7/buffer.npz',
-            collection_mode='offline',
         ),
         net_size=300,
     )
-    setup_logger('offline_sac', variant=variant)
+    setup_logger('cloning', variant=variant)
     ptu.set_gpu_mode(True)  # optionally set the GPU (default=False)
     experiment(variant)

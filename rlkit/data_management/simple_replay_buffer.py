@@ -49,9 +49,13 @@ class SimpleReplayBuffer(ReplayBuffer):
             rewards=self._rewards[indices],
             terminals=self._terminals[indices],
             next_observations=self._next_obs[indices],
+            indices=indices,
         )
 
     def num_steps_can_sample(self):
+        return self._size
+
+    def __len__(self):
         return self._size
 
     def save_to(self, filename):
@@ -73,7 +77,7 @@ class SimpleReplayBuffer(ReplayBuffer):
         self._action_dim = npz_data['action_dim']
         self._max_replay_buffer_size = npz_data['max_replay_buffer_size']
         self._observations = npz_data['observations']
-        self._next_obs = npz_data['_next_obs']
+        self._next_obs = npz_data['next_obs']
         self._actions = npz_data['actions']
         self._rewards = npz_data['rewards']
         self._terminals = npz_data['terminals']

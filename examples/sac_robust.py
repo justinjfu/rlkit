@@ -40,7 +40,7 @@ def experiment(variant):
         obs_dim=obs_dim,
         action_dim=action_dim,
     )
-    algorithm = SoftActorCritic(
+    algorithm = robust_sac.RobustSAC(
         env=env,
         policy=policy,
         qf=qf,
@@ -67,13 +67,14 @@ if __name__ == "__main__":
             policy_lr=3E-4,
             qf_lr=3E-4,
             vf_lr=3E-4,
+            robust_mode='v2',
             use_automatic_entropy_tuning=False,
-            #replay_buffer_file='buffers/sac_halfcheetah/random1e7/buffer.npz',
             replay_buffer_file='buffers/sac_halfcheetah/itr250_1e7/buffer.npz',
+            dists_file='buffers/sac_halfcheetah/itr250_1e7/min_dists.txt',
             collection_mode='offline',
         ),
         net_size=300,
     )
-    setup_logger('offline_sac', variant=variant)
+    setup_logger('offline_sac_robust', variant=variant)
     ptu.set_gpu_mode(True)  # optionally set the GPU (default=False)
     experiment(variant)
