@@ -10,7 +10,7 @@ import rlkit.torch.pytorch_util as ptu
 from rlkit.envs.wrappers import NormalizedBoxEnv
 from rlkit.launchers.launcher_util import setup_logger
 from rlkit.torch.sac.policies import TanhGaussianPolicy
-from rlkit.torch.sac.sac import SoftActorCritic
+from rlkit.torch.sac.sac_badness2 import BadnessSoftActorCritic
 from rlkit.torch.networks import FlattenMlp
 
 
@@ -39,7 +39,7 @@ def experiment(variant):
         obs_dim=obs_dim,
         action_dim=action_dim,
     )
-    algorithm = SoftActorCritic(
+    algorithm = BadnessSoftActorCritic(
         env=env,
         policy=policy,
         qf=qf,
@@ -60,16 +60,20 @@ if __name__ == "__main__":
             batch_size=128,
             max_path_length=999,
             discount=0.99,
-            reward_scale=1,
+            reward_scale=1.0,
 
             soft_target_tau=0.001,
             policy_lr=3E-4,
             qf_lr=3E-4,
             vf_lr=3E-4,
-            train_policy_with_reparameterization=False,
+            train_policy_with_reparameterization=True,
+
+            sampling_b_weight=-1.0,
+            eval_b_weight=-0.0,
+            #separate_eval_policy=True,
         ),
         net_size=300,
     )
-    setup_logger('name-of-experiment', variant=variant)
+    setup_logger('badness-sac', variant=variant)
     # ptu.set_gpu_mode(True)  # optionally set the GPU (default=False)
     experiment(variant)
