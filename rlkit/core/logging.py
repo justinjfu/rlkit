@@ -307,3 +307,7 @@ class Logger(object):
 
 
 logger = Logger()
+
+def reset_logger():
+    logger.reset()
+

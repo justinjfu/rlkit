@@ -10,6 +10,9 @@ from rlkit.core.eval_util import create_stats_ordered_dict
 from rlkit.torch.torch_rl_algorithm import TorchRLAlgorithm
 from rlkit.torch.sac.policies import MakeDeterministic
 
+EXPL_POLICY = 'policy'
+EXPL_RANDOM = 'random'
+EXPL_EXPERT = 'expert'
 
 class BadnessSoftActorCritic(TorchRLAlgorithm):
     def __init__(
@@ -32,6 +35,8 @@ class BadnessSoftActorCritic(TorchRLAlgorithm):
             plotter=None,
             render_eval_paths=False,
             eval_deterministic=True,
+            exploration_policy_type=EXPL_POLICY,
+            expert_exploration_policy=None,
 
             use_automatic_entropy_tuning=True,
             target_entropy=None,
@@ -44,9 +49,17 @@ class BadnessSoftActorCritic(TorchRLAlgorithm):
             eval_policy = MakeDeterministic(policy)
         else:
             eval_policy = policy
+
+        if exploration_policy_type == EXPL_POLICY:
+            exploration_policy = policy
+        elif exploration_policy_type == EXPL_RANDOM:
+            exploration_policy = policy.copy()
+        elif exploration_policy_type == EXPL_EXPERT:
+            exploration_policy = expert_exploration_policy
+
         super().__init__(
             env=env,
-            exploration_policy=policy,
+            exploration_policy=exploration_policy,
             eval_policy=eval_policy,
             **kwargs
         )

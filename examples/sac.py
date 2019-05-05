@@ -54,7 +54,7 @@ if __name__ == "__main__":
     # noinspection PyTypeChecker
     variant = dict(
         algo_params=dict(
-            num_epochs=1000,
+            num_epochs=3000,
             num_steps_per_epoch=1000,
             num_steps_per_eval=1000,
             batch_size=128,

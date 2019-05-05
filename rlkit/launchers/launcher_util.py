@@ -12,7 +12,7 @@ import __main__ as main
 import dateutil.tz
 import numpy as np
 
-from rlkit.core import logger
+from rlkit.core import logger, logging
 from rlkit.launchers import config
 from rlkit.torch.pytorch_util import set_gpu_mode
 import rlkit.pythonplusplus as ppp
@@ -247,6 +247,7 @@ def setup_logger(
     :param script_name: If set, save the script name to this.
     :return:
     """
+    logging.reset_logger()
     if git_infos is None:
         git_infos = get_git_infos(config.CODE_DIRS_TO_MOUNT)
     first_time = log_dir is None

@@ -1,6 +1,8 @@
+import os
 import copy
 import uuid
 import numpy as np
+import pickle
 from gym.envs.mujoco import HalfCheetahEnv
 from gym.envs.mujoco import SwimmerEnv
 from gym.envs.mujoco import AntEnv
@@ -16,13 +18,13 @@ from rlkit.torch.networks import FlattenMlp
 from rlkit.doodad_helper import *
 from rlkit import hyper_sweep
 
-def main(net_size=300, repeat=0, env_name='cheetah', **algo_params):
+EXPERT_POLICY_DIR = '/data/policies'
+
+def main(net_size=300, repeat=0, env_name='cheetah', exploration_policy_file=None, **algo_params):
     if env_name == 'cheetah':
         env = NormalizedBoxEnv(HalfCheetahEnv())
     elif env_name == 'hopper':
         env = NormalizedBoxEnv(HopperEnv())
-    elif env_name == 'ant':
-        env = NormalizedBoxEnv(AntEnv())
     else:
         raise NotImplementedError()
     #elif env == 'ant':
@@ -67,11 +69,19 @@ def main(net_size=300, repeat=0, env_name='cheetah', **algo_params):
         vf_lr=3E-4,
 
         use_automatic_entropy_tuning=True,
+        exploration_policy_type='expert'
     )
     default_params.update(algo_params)
+
+    # load the expert policy
+    with open(os.path.join(EXPERT_POLICY_DIR, exploration_policy_file), 'rb') as f:
+        data = pickle.load(f)
+    expert_exploration_policy = data['exploration_policy']
+
     algorithm = BadnessSoftActorCritic(
         env=env,
         policy=policy,
+        expert_exploration_policy=expert_exploration_policy,
         qf=qf,
         vf=vf,
         **default_params
@@ -95,20 +105,20 @@ if __name__ == "__main__":
         net_size=[300],
         repeat=range(5),
         sampling_b_weight=[-1.0,-0.5,0.0,0.5, 1.0],
-        env_name=['ant'],
+        env_name=['cheetah'],
         #num_updates_per_env_step=[4,2,1],
         #soft_target_tau=[0.001, 0.005, 0.01],
-        num_updates_per_env_step=[8,4,1],
+        #num_updates_per_env_step=[16,8],
         soft_target_tau=[0.01, 0.1],
-        exploration_policy_type=['random', 'policy']
+        exploration_policy_file=['6k.pkl']
     )
-
+    import doodad
+    policy_data_mount = doodad.mount.MountLocal(local_dir='policies', mount_point=EXPERT_POLICY_DIR)
+    mounts = [policy_data_mount]
     #hyper_sweep.run_sweep_parallel(main, args, repeat=3)
     #hyper_sweep.run_sweep_serial(main, args, repeat=1)
-    #SWEEPER_WEST1.run_single_gcp(main, {})
-    #SWEEPER_EAST1.run_test_docker(main, args)
 
-    SWEEPER_WEST1.run_sweep_gcp_chunked(main, args, 120, instance_type='n1-standard-2', s3_log_name='badness_ant_max_speed', region='us-west1-a', preemptible=True)
+    #SWEEPER_WEST1.run_sweep_gcp_chunked(main, args, 120, instance_type='n1-standard-2', s3_log_name='badness_cheetah_max_speed', region='us-west1-a', preemptible=True)
     #SWEEPER_EAST1.run_sweep_gcp_chunked(main, args, 120, instance_type='n1-standard-4', s3_log_name='badness_cheetah_sac', region='us-east1-b')
     #SWEEPER_EAST1.run_sweep_gcp_chunked(main, args, 69, instance_type='n1-standard-4', s3_log_name='exact_weighting_adversarial', region='us-east1-b')
     #SWEEPER_EAST1.run_sweep_gcp_chunked(main, args, 69, instance_type='n1-standard-4', s3_log_name='exact_weighting_stateaction', region='us-east1-b')

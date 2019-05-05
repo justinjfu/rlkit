@@ -10,8 +10,11 @@ from rlkit.core.eval_util import create_stats_ordered_dict
 from rlkit.torch.torch_rl_algorithm import TorchRLAlgorithm
 from rlkit.torch.sac.policies import MakeDeterministic
 
+EXPL_POLICY = 'policy'
+EXPL_RANDOM = 'random'
+EXPL_EXPERT = 'expert'
 
-class BadnessSoftActorCritic(TorchRLAlgorithm):
+class BadnessSoftActorCriticOffpol(TorchRLAlgorithm):
     def __init__(
             self,
             env,
@@ -27,37 +30,40 @@ class BadnessSoftActorCritic(TorchRLAlgorithm):
             policy_pre_activation_weight=0.,
             optimizer_class=optim.Adam,
 
-            train_policy_with_reparameterization=False,
+            train_policy_with_reparameterization=True,
             soft_target_tau=1e-2,
             plotter=None,
             render_eval_paths=False,
             eval_deterministic=True,
+            exploration_policy_type=EXPL_POLICY,
+            expert_exploration_policy=None,
 
             use_automatic_entropy_tuning=True,
             target_entropy=None,
 
-            separate_eval_policy = False,
-            sampling_b_weight=-1.0,
-            eval_b_weight=+1.0,
+            sampling_b_weight=0.0,
+            eval_b_weight=0.0,
             **kwargs
     ):
-        self.separate_eval_policy = separate_eval_policy
-        if self.separate_eval_policy:
-            self._eval_policy = policy.copy()
-            eval_policy = self._eval_policy
-            if eval_deterministic:
-                eval_policy = MakeDeterministic(self._eval_policy)
+        if eval_deterministic:
+            eval_policy = MakeDeterministic(policy)
         else:
             eval_policy = policy
-            if eval_deterministic:
-                eval_policy = MakeDeterministic(policy)
+
+        if exploration_policy_type == EXPL_POLICY:
+            exploration_policy = policy
+        elif exploration_policy_type == EXPL_RANDOM:
+            exploration_policy = policy.copy()
+        elif exploration_policy_type == EXPL_EXPERT:
+            exploration_policy = expert_exploration_policy
+
         super().__init__(
             env=env,
-            exploration_policy=policy,
+            exploration_policy=exploration_policy,
             eval_policy=eval_policy,
             **kwargs
         )
-        self.sampling_policy = policy
+        self.policy = policy
         self.qf = qf
         self.vf = vf
         self.train_policy_with_reparameterization = (
@@ -82,24 +88,20 @@ class BadnessSoftActorCritic(TorchRLAlgorithm):
             )
 
         self.target_vf = vf.copy()
+        self.bf = qf.copy()
+        self.target_bf = self.bf.copy()
         self.qf_criterion = nn.MSELoss()
         self.vf_criterion = nn.MSELoss()
         self.bf_criterion = nn.MSELoss()
 
-        self.bf = qf.copy()
-        self.target_bf = qf.copy()
         self.sampling_b_weight = sampling_b_weight
         self.eval_b_weight = eval_b_weight
 
-        self.sampling_policy_optimizer = optimizer_class(
-            self.sampling_policy.parameters(),
+
+        self.policy_optimizer = optimizer_class(
+            self.policy.parameters(),
             lr=policy_lr,
         )
-        if self.separate_eval_policy:
-            self.eval_policy_optimizer = optimizer_class(
-                self._eval_policy.parameters(),
-                lr=policy_lr,
-            )
         self.qf_optimizer = optimizer_class(
             self.qf.parameters(),
             lr=qf_lr,
@@ -122,21 +124,15 @@ class BadnessSoftActorCritic(TorchRLAlgorithm):
         next_obs = batch['next_observations']
 
         q_pred = self.qf(obs, actions)
-        b_pred = self.bf(obs, actions)
         v_pred = self.vf(obs)
+        b_pred = self.bf(obs, actions)
         # Make sure policy accounts for squashing functions like tanh correctly!
-        if self.separate_eval_policy:
-            policy = self._eval_policy
-        else:
-            policy = self.sampling_policy
-
-        policy_outputs = policy(
+        policy_outputs = self.policy(
                 obs,
                 reparameterize=self.train_policy_with_reparameterization,
                 return_log_prob=True,
         )
         new_actions, policy_mean, policy_log_std, log_pi = policy_outputs[:4]
-
         if self.use_automatic_entropy_tuning:
             """
             Alpha Loss
@@ -170,51 +166,25 @@ class BadnessSoftActorCritic(TorchRLAlgorithm):
         b_target = torch.abs(q_target-q_pred) + (1. - terminals)*self.discount*self.target_bf(next_obs, new_actions) 
         bf_loss = self.bf_criterion(b_pred, b_target.detach())
 
-
         """
         Policy Loss
         """
-        sample_policy_outputs = self.sampling_policy(
-                obs,
-                reparameterize=self.train_policy_with_reparameterization,
-                return_log_prob=True,
-        )
-        _, sample_policy_mean, sample_policy_log_std, sample_log_pi = sample_policy_outputs[:4]
-        log_policy_target = q_new_actions - v_pred + self.sampling_b_weight*b_pred
-        policy_loss = (
-            sample_log_pi * (alpha*sample_log_pi - log_policy_target).detach()
-        ).mean()
-        mean_reg_loss = self.policy_mean_reg_weight * (sample_policy_mean**2).mean()
-        std_reg_loss = self.policy_std_reg_weight * (sample_policy_log_std**2).mean()
-        pre_tanh_value = sample_policy_outputs[-1]
+        if self.train_policy_with_reparameterization:
+            b_new_actions = self.bf(obs, new_actions)
+            policy_loss = (alpha*log_pi - q_new_actions + self.sampling_b_weight * b_new_actions).mean()
+        else:
+            log_policy_target = q_new_actions - v_pred
+            policy_loss = (
+                log_pi * (alpha*log_pi - log_policy_target).detach()
+            ).mean()
+        mean_reg_loss = self.policy_mean_reg_weight * (policy_mean**2).mean()
+        std_reg_loss = self.policy_std_reg_weight * (policy_log_std**2).mean()
+        pre_tanh_value = policy_outputs[-1]
         pre_activation_reg_loss = self.policy_pre_activation_weight * (
             (pre_tanh_value**2).sum(dim=1).mean()
         )
         policy_reg_loss = mean_reg_loss + std_reg_loss + pre_activation_reg_loss
         policy_loss = policy_loss + policy_reg_loss
-
-        """
-        Eval policy loss
-        """
-        if self.separate_eval_policy:
-            eval_policy_outputs = self._eval_policy(
-                    obs,
-                    reparameterize=self.train_policy_with_reparameterization,
-                    return_log_prob=True,
-            )
-            _, eval_policy_mean, eval_policy_log_std, eval_log_pi = eval_policy_outputs[:4]
-            log_policy_target = q_new_actions - v_pred + self.eval_b_weight*b_pred
-            eval_policy_loss = (
-                eval_log_pi * (alpha*eval_log_pi - log_policy_target).detach()
-            ).mean()
-            mean_reg_loss = self.policy_mean_reg_weight * (eval_policy_mean**2).mean()
-            std_reg_loss = self.policy_std_reg_weight * (eval_policy_log_std**2).mean()
-            pre_tanh_value = eval_policy_outputs[-1]
-            pre_activation_reg_loss = self.policy_pre_activation_weight * (
-                (pre_tanh_value**2).sum(dim=1).mean()
-            )
-            eval_policy_reg_loss = mean_reg_loss + std_reg_loss + pre_activation_reg_loss
-            eval_policy_loss = eval_policy_loss + eval_policy_reg_loss
 
         """
         Update networks
@@ -226,19 +196,14 @@ class BadnessSoftActorCritic(TorchRLAlgorithm):
         self.vf_optimizer.zero_grad()
         vf_loss.backward()
         self.vf_optimizer.step()
-        
+
+        self.policy_optimizer.zero_grad()
+        policy_loss.backward()
+        self.policy_optimizer.step()
+
         self.bf_optimizer.zero_grad()
         bf_loss.backward()
         self.bf_optimizer.step()
-
-        self.sampling_policy_optimizer.zero_grad()
-        policy_loss.backward()
-        self.sampling_policy_optimizer.step()
-
-        if self.separate_eval_policy:
-            self.eval_policy_optimizer.zero_grad()
-            eval_policy_loss.backward()
-            self.eval_policy_optimizer.step()
 
         self._update_target_network()
 
@@ -249,7 +214,6 @@ class BadnessSoftActorCritic(TorchRLAlgorithm):
             self.need_to_update_eval_statistics = False
             self.eval_statistics['QF Loss'] = np.mean(ptu.get_numpy(qf_loss))
             self.eval_statistics['VF Loss'] = np.mean(ptu.get_numpy(vf_loss))
-            self.eval_statistics['BF Loss'] = np.mean(ptu.get_numpy(bf_loss))
             self.eval_statistics['Policy Loss'] = np.mean(ptu.get_numpy(
                 policy_loss
             ))
@@ -283,29 +247,22 @@ class BadnessSoftActorCritic(TorchRLAlgorithm):
 
     @property
     def networks(self):
-        networks= [
-            self.sampling_policy,
+        return [
+            self.policy,
             self.qf,
             self.vf,
             self.target_vf,
-            self.bf,
-            self.target_bf,
         ]
-        if self.separate_eval_policy:
-            networks.append(self._eval_policy)
-
-        return networks
 
     def _update_target_network(self):
         ptu.soft_update_from_to(self.vf, self.target_vf, self.soft_target_tau)
         ptu.soft_update_from_to(self.bf, self.target_bf, self.soft_target_tau)
-        #ptu.copy_from_to(self.
 
     def get_epoch_snapshot(self, epoch):
         snapshot = super().get_epoch_snapshot(epoch)
         snapshot.update(
             qf=self.qf,
-            policy=self.sampling_policy,
+            policy=self.policy,
             vf=self.vf,
             target_vf=self.target_vf,
         )

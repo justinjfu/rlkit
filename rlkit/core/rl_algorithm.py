@@ -321,7 +321,8 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
             eval_time = times_itrs['eval'][-1] if epoch > 0 else 0
             epoch_time = train_time + sample_time + eval_time
             total_time = gt.get_times().total
-
+            logger.record_tabular("Replay Buffer Size", len(self.replay_buffer))
+            logger.record_tabular("Replay Buffer Gap", self._n_env_steps_total-len(self.replay_buffer))
             logger.record_tabular('Train Time (s)', train_time)
             logger.record_tabular('(Previous) Eval Time (s)', eval_time)
             logger.record_tabular('Sample Time (s)', sample_time)

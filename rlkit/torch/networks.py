@@ -79,11 +79,40 @@ class Mlp(PyTorchModule):
             return output
 
 
+class RandomizedMlp(PyTorchModule):
+    def __init__(
+            self,
+            *mlp_args,
+            random_scale_ratio=5.0,
+            **mlp_kwargs
+    ):
+        self.save_init_params(locals())
+        super().__init__()
+
+        self.mlp_trainable = Mlp(*mlp_args, **mlp_kwargs)
+        self.mlp_fixed = Mlp(*mlp_args, **mlp_kwargs)
+        self.scale = random_scale_ratio
+
+    def forward(self, input):
+        trainable = self.mlp_trainable(input)
+        fixed = self.mlp_fixed(input)
+        return trainable + self.scale * fixed.detach()
+
+
 class FlattenMlp(Mlp):
     """
     Flatten inputs along dimension 1 and then pass through MLP.
     """
 
+    def forward(self, *inputs, **kwargs):
+        flat_inputs = torch.cat(inputs, dim=1)
+        return super().forward(flat_inputs, **kwargs)
+
+
+class RandomizedFlattenMlp(RandomizedMlp):
+    """
+    Flatten inputs along dimension 1 and then pass through RandomizedMLP.
+    """
     def forward(self, *inputs, **kwargs):
         flat_inputs = torch.cat(inputs, dim=1)
         return super().forward(flat_inputs, **kwargs)

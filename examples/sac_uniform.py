@@ -3,10 +3,8 @@ Run PyTorch Soft Actor Critic on HalfCheetahEnv.
 
 NOTE: You need PyTorch 0.3 or more (to have torch.distributions)
 """
-import os
 import numpy as np
 from gym.envs.mujoco import HalfCheetahEnv
-from gym.envs.mujoco import AntEnv, HopperEnv, Walker2dEnv
 
 import rlkit.torch.pytorch_util as ptu
 from rlkit.envs.wrappers import NormalizedBoxEnv
@@ -14,11 +12,11 @@ from rlkit.launchers.launcher_util import setup_logger
 from rlkit.torch.sac.policies import TanhGaussianPolicy
 from rlkit.torch.sac.sac import SoftActorCritic
 from rlkit.torch.networks import FlattenMlp
+from rlkit.data_management import spanning_replay_buffer
 
 
-def experiment(variant, log_dir):
-    #env = NormalizedBoxEnv(HalfCheetahEnv())
-    env = NormalizedBoxEnv(HopperEnv())
+def experiment(variant):
+    env = NormalizedBoxEnv(HalfCheetahEnv())
     # Or for a specific version:
     # import gym
     # env = NormalizedBoxEnv(gym.make('HalfCheetah-v1'))
@@ -42,38 +40,45 @@ def experiment(variant, log_dir):
         obs_dim=obs_dim,
         action_dim=action_dim,
     )
+
+    replay_buffer = spanning_replay_buffer.SpanningEnvReplayBuffer(
+            max_replay_buffer_size=1e6,
+            env=env,
+            l2_ball=30.0,
+    )
+
     algorithm = SoftActorCritic(
         env=env,
         policy=policy,
+        replay_buffer=replay_buffer,
         qf=qf,
         vf=vf,
         **variant['algo_params']
     )
     algorithm.to(ptu.device)
-    #algorithm.train()
-    algorithm.collect_data(os.path.join(log_dir, 'buffer'), variant['num_samples_to_collect'])
+    algorithm.train()
 
 
 if __name__ == "__main__":
     # noinspection PyTypeChecker
     variant = dict(
         algo_params=dict(
-            num_epochs=3000,
+            num_epochs=1000,
             num_steps_per_epoch=1000,
             num_steps_per_eval=1000,
             batch_size=128,
             max_path_length=999,
             discount=0.99,
             reward_scale=1,
+
             soft_target_tau=0.001,
             policy_lr=3E-4,
             qf_lr=3E-4,
             vf_lr=3E-4,
-
+            train_policy_with_reparameterization=False,
         ),
         net_size=300,
-        num_samples_to_collect=1000000,
     )
-    log_dir = setup_logger('sac-data-collect-hopper', variant=variant)
-    ptu.set_gpu_mode(True)  # optionally set the GPU (default=False)
-    experiment(variant, log_dir)
+    setup_logger('name-of-experiment', variant=variant)
+    # ptu.set_gpu_mode(True)  # optionally set the GPU (default=False)
+    experiment(variant)
