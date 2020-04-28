@@ -27,12 +27,13 @@ def rollout(env, agent, max_path_length=np.inf, animated=False):
     rewards = []
     terminals = []
     agent_infos = []
+    frames = []
     env_infos = []
     o = env.reset()
     next_o = None
     path_length = 0
     if animated:
-        env.render()
+        curr_frame = env.sim.render(width=300, height=300, mode="offscreen", camera_name="track", depth=False)
     while path_length < max_path_length:
         a, agent_info = agent.get_action(o)
         next_o, r, d, env_info = env.step(a)
@@ -42,12 +43,14 @@ def rollout(env, agent, max_path_length=np.inf, animated=False):
         actions.append(a)
         agent_infos.append(agent_info)
         env_infos.append(env_info)
+        if animated:
+            frames.append(curr_frame)
         path_length += 1
         if d:
             break
         o = next_o
         if animated:
-            env.render()
+            curr_frame = env.sim.render(width=300, height=300, mode="offscreen", camera_name="track", depth=False)
 
     actions = np.array(actions)
     if len(actions.shape) == 1:
@@ -62,6 +65,7 @@ def rollout(env, agent, max_path_length=np.inf, animated=False):
             np.expand_dims(next_o, 0)
         )
     )
+    frames = np.array(frames)
     return dict(
         observations=observations,
         actions=actions,
@@ -70,6 +74,7 @@ def rollout(env, agent, max_path_length=np.inf, animated=False):
         terminals=np.array(terminals).reshape(-1, 1),
         agent_infos=agent_infos,
         env_infos=env_infos,
+        frames=frames,
     )
 
 

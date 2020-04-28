@@ -6,19 +6,20 @@ NOTE: You need PyTorch 0.3 or more (to have torch.distributions)
 import os
 import numpy as np
 from gym.envs.mujoco import HalfCheetahEnv
-from gym.envs.mujoco import AntEnv, HopperEnv, Walker2dEnv
+from gym.envs.mujoco import AntEnv, HopperEnv, Walker2dEnv, HumanoidEnv
 
 import rlkit.torch.pytorch_util as ptu
 from rlkit.envs.wrappers import NormalizedBoxEnv
 from rlkit.launchers.launcher_util import setup_logger
 from rlkit.torch.sac.policies import TanhGaussianPolicy
 from rlkit.torch.sac.sac import SoftActorCritic
+from rlkit.torch.sac.twin_sac import TwinSAC
 from rlkit.torch.networks import FlattenMlp
 
 
 def experiment(variant, log_dir):
     #env = NormalizedBoxEnv(HalfCheetahEnv())
-    env = NormalizedBoxEnv(HopperEnv())
+    env = NormalizedBoxEnv(AntEnv())
     # Or for a specific version:
     # import gym
     # env = NormalizedBoxEnv(gym.make('HalfCheetah-v1'))
@@ -27,10 +28,15 @@ def experiment(variant, log_dir):
     action_dim = int(np.prod(env.action_space.shape))
 
     net_size = variant['net_size']
-    qf = FlattenMlp(
+    qf1 = FlattenMlp(
         hidden_sizes=[net_size, net_size],
         input_size=obs_dim + action_dim,
         output_size=1,
+    )
+    qf2 = FlattenMlp(
+        hidden_sizes=[net_size, net_size],
+        input_size=obs_dim + action_dim,
+        output_size=1
     )
     vf = FlattenMlp(
         hidden_sizes=[net_size, net_size],
@@ -42,23 +48,25 @@ def experiment(variant, log_dir):
         obs_dim=obs_dim,
         action_dim=action_dim,
     )
-    algorithm = SoftActorCritic(
+    algorithm = TwinSAC(
         env=env,
         policy=policy,
-        qf=qf,
+        qf1=qf1,
+        qf2=qf2,
         vf=vf,
         **variant['algo_params']
     )
     algorithm.to(ptu.device)
-    #algorithm.train()
-    algorithm.collect_data(os.path.join(log_dir, 'buffer'), variant['num_samples_to_collect'])
+    algorithm.train()
+    algorithm.replay_buffer.save_to(os.path.join(log_dir, 'replay_buffer'))
+    # algorithm.collect_data(os.path.join(log_dir, 'buffer'), variant['num_samples_to_collect'])
 
 
 if __name__ == "__main__":
     # noinspection PyTypeChecker
     variant = dict(
         algo_params=dict(
-            num_epochs=3000,
+            num_epochs=750,
             num_steps_per_epoch=1000,
             num_steps_per_eval=1000,
             batch_size=128,
@@ -74,6 +82,6 @@ if __name__ == "__main__":
         net_size=300,
         num_samples_to_collect=1000000,
     )
-    log_dir = setup_logger('sac-data-collect-hopper', variant=variant)
+    log_dir = setup_logger('sac-data-collect-ant-mixed', variant=variant)
     ptu.set_gpu_mode(True)  # optionally set the GPU (default=False)
     experiment(variant, log_dir)

@@ -12,7 +12,7 @@ from rlkit.data_management.env_replay_buffer import EnvReplayBuffer
 from rlkit.data_management.path_builder import PathBuilder
 from rlkit.policies.base import ExplorationPolicy
 from rlkit.samplers.in_place import InPlacePathSampler
-
+from PIL import Image
 
 class RLAlgorithm(metaclass=abc.ABCMeta):
     def __init__(
@@ -165,7 +165,7 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
         self._n_env_steps_total = start_epoch * self.num_env_steps_per_epoch
         gt.reset()
         gt.set_def_unique(False)
-        if self.collection_mode == 'online':
+        '''if self.collection_mode == 'online':
             self.train_online(start_epoch=start_epoch)
         elif self.collection_mode == 'batch':
             self.train_batch(start_epoch=start_epoch)
@@ -174,7 +174,7 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
         else:
             raise TypeError("Invalid collection_mode: {}".format(
                 self.collection_mode
-            ))
+            ))'''
 
         replay_buffer = EnvReplayBuffer(
             num_samples,
@@ -182,8 +182,12 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
         )
         self.replay_buffer = replay_buffer
         observation = self._start_new_rollout()
-        for _ in tqdm.tqdm(range(num_samples)):
-            observation = self._take_step_in_env(observation)
+        # import ipdb; ipdb.set_trace()
+        for idx in tqdm.tqdm(range(num_samples)):
+            if idx < 1000:
+                observation = self._take_step_in_env(observation, render=True, counter=idx)
+            else:
+                observation = self._take_step_in_env(observation)
         replay_buffer.save_to(filename)
 
     def pretrain(self):
@@ -250,12 +254,17 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
             gt.stamp('eval')
             self._end_epoch(epoch)
 
-    def _take_step_in_env(self, observation):
+    def _take_step_in_env(self, observation, render=False, dump_images=True, counter=0):
         action, agent_info = self._get_action_and_info(
             observation,
         )
-        if self.render:
-            self.training_env.render()
+        if self.render or render:
+            #self.training_env.render()
+            curr_frame = self.training_env.sim.render(width=1280, height=720, mode="offscreen", camera_name="track", depth=False)
+            if dump_images:
+                img = Image.fromarray(np.flipud(curr_frame), 'RGB')
+                img.save("output/imgs_cheetah_new_300/curr_frame{:03d}.png".format(counter))
+        
         next_ob, raw_reward, terminal, env_info = (
             self.training_env.step(action)
         )
