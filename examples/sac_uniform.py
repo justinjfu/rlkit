@@ -12,7 +12,8 @@ from rlkit.launchers.launcher_util import setup_logger
 from rlkit.torch.sac.policies import TanhGaussianPolicy
 from rlkit.torch.sac.sac import SoftActorCritic
 from rlkit.torch.networks import FlattenMlp
-from rlkit.data_management import spanning_replay_buffer
+#from rlkit.data_management import spanning_replay_buffer
+from rlkit.data_management import prioritized_replay_buffer
 
 
 def experiment(variant):
@@ -41,10 +42,16 @@ def experiment(variant):
         action_dim=action_dim,
     )
 
+    """
     replay_buffer = spanning_replay_buffer.SpanningEnvReplayBuffer(
             max_replay_buffer_size=1e6,
             env=env,
             l2_ball=30.0,
+    )
+    """
+    replay_buffer = prioritized_replay_buffer.PrioritizedEnvReplayBuffer(
+            max_replay_buffer_size=1e6,
+            env=env,
     )
 
     algorithm = SoftActorCritic(

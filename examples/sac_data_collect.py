@@ -18,7 +18,7 @@ from rlkit.torch.networks import FlattenMlp
 
 def experiment(variant, log_dir):
     #env = NormalizedBoxEnv(HalfCheetahEnv())
-    env = NormalizedBoxEnv(HopperEnv())
+    env = NormalizedBoxEnv(Walker2dEnv())
     # Or for a specific version:
     # import gym
     # env = NormalizedBoxEnv(gym.make('HalfCheetah-v1'))
@@ -58,7 +58,7 @@ if __name__ == "__main__":
     # noinspection PyTypeChecker
     variant = dict(
         algo_params=dict(
-            num_epochs=3000,
+            num_epochs=0,
             num_steps_per_epoch=1000,
             num_steps_per_eval=1000,
             batch_size=128,
@@ -74,6 +74,6 @@ if __name__ == "__main__":
         net_size=300,
         num_samples_to_collect=1000000,
     )
-    log_dir = setup_logger('sac-data-collect-hopper', variant=variant)
+    log_dir = setup_logger('sac-data-collect-walker', variant=variant)
     ptu.set_gpu_mode(True)  # optionally set the GPU (default=False)
     experiment(variant, log_dir)

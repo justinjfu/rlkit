@@ -71,16 +71,19 @@ class SimpleReplayBuffer(ReplayBuffer):
                 top=self._top,
                 size=self._size)
 
-    def load_from(self, filename):
+    def load_from(self, filename, num_replay_samples=None):
         npz_data = np.load(filename)
         self._observation_dim = npz_data['observation_dim']
         self._action_dim = npz_data['action_dim']
         self._max_replay_buffer_size = npz_data['max_replay_buffer_size']
+        self._top = npz_data['top']
+        self._size = npz_data['size']
+        if num_replay_samples is not None:
+            self._size = min(num_replay_samples, self._size)
+
         self._observations = npz_data['observations']
         self._next_obs = npz_data['next_obs']
         self._actions = npz_data['actions']
         self._rewards = npz_data['rewards']
         self._terminals = npz_data['terminals']
-        self._top = npz_data['top']
-        self._size = npz_data['size']
 

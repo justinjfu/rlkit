@@ -71,6 +71,7 @@ def main(net_size=300, repeat=0, env_name='cheetah', exploration_policy_file=Non
 
         use_automatic_entropy_tuning=True,
         #exploration_policy_type='expert'
+
         replay_buffer_file='/buffers/buffer.npz',
         collection_mode='offline',
     )
@@ -109,8 +110,9 @@ if __name__ == "__main__":
         net_size=[300],
         repeat=range(20),
         env_name=['cheetah'],
+        num_replay_samples=[1000, 10000, 100000, 1000000]
     )
-    buffer_name = 'buffers/sac_halfcheetah/sac_random_1e6'
+    buffer_name = 'buffers/sac_halfcheetah/sac_expert_1e6'
     args['buffer_name'] = [buffer_name]
 
     import doodad
@@ -120,7 +122,7 @@ if __name__ == "__main__":
     #hyper_sweep.run_sweep_serial(main, args, repeat=1)
     #SWEEPER_EAST1.run_test_docker(main, args, extra_mounts=mounts)
 
-    SWEEPER_WEST1.run_sweep_gcp_chunked(main, args, 20, instance_type='n1-standard-2', s3_log_name='sac_cheetah_random_data', region='us-west1-a', preemptible=True, extra_mounts=mounts)
+    SWEEPER_WEST1.run_sweep_gcp_chunked(main, args, 80, instance_type='n1-standard-2', s3_log_name='sac_cheetah_expert_offpol_fixed', region='us-west1-a', preemptible=True, extra_mounts=mounts)
     #SWEEPER_EAST1.run_sweep_gcp_chunked(main, args, 120, instance_type='n1-standard-4', s3_log_name='badness_cheetah_sac', region='us-east1-b')
     #SWEEPER_EAST1.run_sweep_gcp_chunked(main, args, 69, instance_type='n1-standard-4', s3_log_name='exact_weighting_adversarial', region='us-east1-b')
     #SWEEPER_EAST1.run_sweep_gcp_chunked(main, args, 69, instance_type='n1-standard-4', s3_log_name='exact_weighting_stateaction', region='us-east1-b')

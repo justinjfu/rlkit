@@ -6,19 +6,23 @@ from collections import OrderedDict
 from numbers import Number
 
 import numpy as np
+import scipy.signal
 
 
-def get_generic_path_information(paths, stat_prefix=''):
+def get_generic_path_information(paths, discount=0.99, stat_prefix=''):
     """
     Get an OrderedDict with a bunch of statistic names and values.
     """
     statistics = OrderedDict()
     returns = [sum(path["rewards"]) for path in paths]
+    discounted_returns = [discounted_return(path["rewards"], discount=discount) for path in paths]
 
     rewards = np.vstack([path["rewards"] for path in paths])
     statistics.update(create_stats_ordered_dict('Rewards', rewards,
                                                 stat_prefix=stat_prefix))
     statistics.update(create_stats_ordered_dict('Returns', returns,
+                                                stat_prefix=stat_prefix))
+    statistics.update(create_stats_ordered_dict('DiscountedReturns', discounted_returns,
                                                 stat_prefix=stat_prefix))
     actions = [path["actions"] for path in paths]
     if len(actions[0].shape) == 1:
@@ -31,6 +35,9 @@ def get_generic_path_information(paths, stat_prefix=''):
     statistics['Num Paths'] = len(paths)
 
     return statistics
+
+def discounted_return(rewards, discount):
+    return scipy.signal.lfilter([1], [1, float(-discount)], rewards[::-1], axis=0)[::-1]
 
 
 def get_average_returns(paths):

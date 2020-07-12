@@ -61,14 +61,16 @@ if __name__ == "__main__":
             max_path_length=999,
             discount=0.99,
             reward_scale=1,
+            alpha=0.00,
 
-            soft_target_tau=0.001,
+            soft_target_tau=5e-3,
             policy_lr=3E-4,
             qf_lr=3E-4,
             vf_lr=3E-4,
             train_policy_with_reparameterization=False,
+            use_automatic_entropy_tuning=False
         ),
-        net_size=300,
+        net_size=256,
     )
     setup_logger('name-of-experiment', variant=variant)
     # ptu.set_gpu_mode(True)  # optionally set the GPU (default=False)

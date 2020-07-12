@@ -39,6 +39,7 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
             eval_policy=None,
             replay_buffer=None,
             replay_buffer_file=None,
+            num_replay_samples=None,
             collection_mode='online',
     ):
         """
@@ -122,7 +123,7 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
                 self.env,
             )
             if replay_buffer_file is not None:
-                replay_buffer.load_from(replay_buffer_file)
+                replay_buffer.load_from(replay_buffer_file, num_replay_samples=num_replay_samples)
         self.replay_buffer = replay_buffer
 
         self._n_env_steps_total = 0
@@ -135,6 +136,9 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
         self._current_path_builder = PathBuilder()
         self._exploration_paths = []
         self.post_epoch_funcs = []
+        
+        self.latest_returns_avg = None
+        self.latest_returns_avg_alpha = 0.05
 
     def train(self, start_epoch=0):
         self.pretrain()
@@ -244,7 +248,7 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
                 self._try_to_train()
             gt.stamp('train')
             set_to_eval_mode(self.env)
-            #self._try_to_eval(epoch, force_eval=True)
+            self._try_to_eval(epoch) #, force_eval=True)
             self.evaluate(epoch)
             logger.dump_tabular(with_prefix=False, with_timestamp=False)
             gt.stamp('eval')
@@ -289,7 +293,9 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
 
     def _try_to_eval(self, epoch, eval_paths=None, force_eval=False, no_test=False):
         logger.save_extra_data(self.get_extra_data_to_save(epoch))
+        logger.record_tabular("Replay Buffer Size", len(self.replay_buffer))
         if self._can_evaluate() or force_eval:
+
             if not no_test:
                 self.evaluate(epoch, eval_paths=eval_paths)
 
@@ -321,7 +327,6 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
             eval_time = times_itrs['eval'][-1] if epoch > 0 else 0
             epoch_time = train_time + sample_time + eval_time
             total_time = gt.get_times().total
-            logger.record_tabular("Replay Buffer Size", len(self.replay_buffer))
             logger.record_tabular("Replay Buffer Gap", self._n_env_steps_total-len(self.replay_buffer))
             logger.record_tabular('Train Time (s)', train_time)
             logger.record_tabular('(Previous) Eval Time (s)', eval_time)
@@ -514,11 +519,19 @@ class RLAlgorithm(metaclass=abc.ABCMeta):
             test_paths = self.get_eval_paths()
         statistics.update(eval_util.get_generic_path_information(
             test_paths, stat_prefix="Test",
+            discount=self.discount
         ))
         if len(self._exploration_paths) > 0:
             statistics.update(eval_util.get_generic_path_information(
                 self._exploration_paths, stat_prefix="Exploration",
+                discount=self.discount
             ))
+
+            disc_returns = np.mean([eval_util.discounted_return(path['rewards'], discount=self.discount) for path in self._exploration_paths])
+            if self.latest_returns_avg is None:
+                self.latest_returns_avg = disc_returns
+            self.latest_returns_avg = self.latest_returns_avg_alpha * disc_returns + (1-self.latest_returns_avg_alpha) * self.latest_returns_avg 
+
         if hasattr(self.env, "log_diagnostics"):
             self.env.log_diagnostics(test_paths, logger=logger)
         if hasattr(self.env, "get_diagnostics"):

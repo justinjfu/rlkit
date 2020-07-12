@@ -1,5 +1,6 @@
 from collections import OrderedDict
 
+import torch
 import numpy as np
 import torch.optim as optim
 from torch import nn as nn
@@ -21,6 +22,7 @@ class SoftActorCritic(TorchRLAlgorithm):
             policy_lr=1e-3,
             qf_lr=1e-3,
             vf_lr=1e-3,
+            alpha=1.0,
             policy_mean_reg_weight=1e-3,
             policy_std_reg_weight=1e-3,
             policy_pre_activation_weight=0.,
@@ -46,6 +48,7 @@ class SoftActorCritic(TorchRLAlgorithm):
             eval_policy=eval_policy,
             **kwargs
         )
+        self.alpha = alpha
         self.policy = policy
         self.qf = qf
         self.vf = vf
@@ -87,6 +90,8 @@ class SoftActorCritic(TorchRLAlgorithm):
             lr=vf_lr,
         )
 
+        self.s0 = ptu.tensor(self.env.reset()[np.newaxis, :].astype(np.float32))
+
     def _do_training(self):
         batch = self.get_batch()
         rewards = batch['rewards']
@@ -114,8 +119,9 @@ class SoftActorCritic(TorchRLAlgorithm):
             self.alpha_optimizer.step()
             alpha = self.log_alpha.exp()
         else:
-            alpha = 1
+            alpha = self.alpha
             alpha_loss = 0
+
 
         """
         QF Loss
@@ -123,6 +129,12 @@ class SoftActorCritic(TorchRLAlgorithm):
         target_v_values = self.target_vf(next_obs)
         q_target = rewards + (1. - terminals) * self.discount * target_v_values
         qf_loss = self.qf_criterion(q_pred, q_target.detach())
+
+        # prioritized replay
+        if hasattr(self.replay_buffer, 'update_priorities'):
+            priorities = ptu.get_numpy(torch.abs(q_pred-q_target).squeeze())
+            self.replay_buffer.update_priorities(ptu.get_numpy(batch['indices']).astype(np.int64),
+                    priorities)
 
         """
         VF Loss
@@ -185,6 +197,14 @@ class SoftActorCritic(TorchRLAlgorithm):
                 'V Predictions',
                 ptu.get_numpy(v_pred),
             ))
+
+            v0 = ptu.get_numpy(self.vf(self.s0)).squeeze()
+            if self.latest_returns_avg is None:
+                self.eval_statistics['V Error Est'] = 0
+            else:
+                self.eval_statistics['V Error Est'] = np.abs(v0 - self.latest_returns_avg)
+
+
             self.eval_statistics.update(create_stats_ordered_dict(
                 'Log Pis',
                 ptu.get_numpy(log_pi),
