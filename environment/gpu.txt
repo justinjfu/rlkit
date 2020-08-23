@@ -1,0 +1,13 @@
+cython
+joblib==0.9.4
+lockfile
+mako==1.0.6
+matplotlib>=2.0.2
+numpy>=1.11.3
+path.py==10.3.1
+python-dateutil==2.6.1
+scipy==1.0.1
+cloudpickle==0.5.2
+gym[mujoco]==0.10.5
+gitpython==2.1.7
+gtimer==1.0.0b5

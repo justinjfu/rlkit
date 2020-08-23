@@ -3,6 +3,7 @@ Run PyTorch Soft Actor Critic on HalfCheetahEnv.
 
 NOTE: You need PyTorch 0.3 or more (to have torch.distributions)
 """
+import os
 import numpy as np
 from gym.envs.mujoco import HalfCheetahEnv
 
@@ -15,10 +16,10 @@ from rlkit.torch.networks import FlattenMlp
 
 
 def experiment(variant):
-    env = NormalizedBoxEnv(HalfCheetahEnv())
+    #env = NormalizedBoxEnv(HalfCheetahEnv())
     # Or for a specific version:
-    # import gym
-    # env = NormalizedBoxEnv(gym.make('HalfCheetah-v1'))
+    import gym
+    env = NormalizedBoxEnv(gym.make(variant['env_name']))
 
     obs_dim = int(np.prod(env.observation_space.shape))
     action_dim = int(np.prod(env.action_space.shape))
@@ -51,14 +52,19 @@ def experiment(variant):
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--env', type=str, default='HalfCheetah-v2')
+    args = parser.parse_args()
+
     # noinspection PyTypeChecker
     variant = dict(
         algo_params=dict(
-            num_epochs=3000,
+            num_epochs=1000,
             num_steps_per_epoch=1000,
             num_steps_per_eval=1000,
             batch_size=128,
-            max_path_length=999,
+            max_path_length=1000,
             discount=0.99,
             reward_scale=1,
 
@@ -68,8 +74,11 @@ if __name__ == "__main__":
             vf_lr=3E-4,
             train_policy_with_reparameterization=False,
         ),
+        env_name=args.env,
         net_size=300,
     )
-    setup_logger('humanoid', variant=variant)
+
+    folder = os.path.join('ope_pols', variant['env_name'])
+    setup_logger(folder, variant=variant, snapshot_mode='gap', snapshot_gap=10)
     # ptu.set_gpu_mode(True)  # optionally set the GPU (default=False)
     experiment(variant)
